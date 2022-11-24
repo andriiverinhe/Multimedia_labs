@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QMenu, QAction, QFileDialog
-from PyQt5.QtGui import QIcon, QImage, QPainter, QPen
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QMenu, QAction, QFileDialog, QScrollArea
+from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt5.QtCore import Qt, QPoint
 import sys
 
@@ -7,14 +7,15 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        top = 400
-        left = 400
-        width = 800
-        height = 600
+
+        top = 0
+        left = 0
+        width = 1300
+        height = 700
 
         icon = "icons/icon.png"
 
-        self.setWindowTitle("Paint Application")
+        self.setWindowTitle("My Paint")
         self.setGeometry(top, left, width, height)
         self.setWindowIcon(QIcon(icon))
 
@@ -22,22 +23,27 @@ class Window(QMainWindow):
         self.image.fill(Qt.white)
 
         self.drawing = False
+        self.fill = False
         self.brushSize = 2
         self.brushColor = Qt.black
 
         self.lastPoint = QPoint()
 
         mainMenu = self.menuBar()
-        fileMenu = mainMenu.addMenu("File")
-        brushMenu = mainMenu.addMenu("Brush Size")
-        brushColor = mainMenu.addMenu("Brush Color")
+        fileMenu = mainMenu.addMenu("Файл")
+        brushMenu = mainMenu.addMenu("Размер кисти")
+        brushColor = mainMenu.addMenu("Цвет")
 
-        saveAction = QAction(QIcon("icons/save.png"), "Save", self)
+        openActtion = QAction(QIcon("icons/open_file.png"), "Open File", self)
+        fileMenu.addAction(openActtion)
+        openActtion.triggered.connect(self.open)
+
+        saveAction = QAction(QIcon("icons/save.png"), "Сохранить", self)
         saveAction.setShortcut("Ctrl+S")
         fileMenu.addAction((saveAction))
         saveAction.triggered.connect(self.save)
 
-        clearAction = QAction(QIcon("icons/clear.png"), "Clear", self)
+        clearAction = QAction(QIcon("icons/clear.png"), "Очистить холст", self)
         clearAction.setShortcut("Ctrl+C")
         fileMenu.addAction((clearAction))
         clearAction.triggered.connect(self.clear)
@@ -62,33 +68,33 @@ class Window(QMainWindow):
         brushMenu.addAction((px_9Action))
         px_9Action.triggered.connect(self.px_9)
 
-        fillAction = QAction(QIcon("icons/fill.png"), "Fill", self)
+        fillAction = QAction(QIcon("icons/fill.png"), "Заливка", self)
         brushMenu.addAction((fillAction))
+        fillAction.triggered.connect(self.set_fill)
 
 
 
-        RubberAction = QAction(QIcon("icons/clear.png"), "Rubber", self)
-        RubberAction.setShortcut("Ctrl+P")
+        RubberAction = QAction(QIcon("icons/clear.png"), "Ластик", self)
         brushColor.addAction(RubberAction)
         RubberAction.triggered.connect(self.rubberColor)
 
-        blackAction = QAction(QIcon("icons/black.png"), "Black", self)
+        blackAction = QAction(QIcon("icons/black.png"), "Чёрный", self)
         brushColor.addAction(blackAction)
         blackAction.triggered.connect(self.blackColor)
 
-        redAction = QAction(QIcon("icons/red.png"), "Red", self)
+        redAction = QAction(QIcon("icons/red.png"), "Красный", self)
         brushColor.addAction(redAction)
         redAction.triggered.connect(self.redColor)
 
-        greenAction = QAction(QIcon("icons/green.png"), "Green", self)
+        greenAction = QAction(QIcon("icons/green.png"), "Зелёный", self)
         brushColor.addAction(greenAction)
         greenAction.triggered.connect(self.greenColor)
 
-        yellowAction = QAction(QIcon("icons/yellow.png"), "Yellow", self)
+        yellowAction = QAction(QIcon("icons/yellow.png"), "Жолтый", self)
         brushColor.addAction(yellowAction)
         yellowAction.triggered.connect(self.yellowColor)
 
-        greyAction = QAction(QIcon("icons/grey.jpg"), "Grey", self)
+        greyAction = QAction(QIcon("icons/grey.jpg"), "Серый", self)
         brushColor.addAction(greyAction)
         greyAction.triggered.connect(self.greyColor)
 
@@ -96,10 +102,13 @@ class Window(QMainWindow):
 
 
 
+
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and not self.fill:
             self.drawing = True
             self.lastPoint = event.pos()
+        elif event.button() == Qt.LeftButton and self.fill:
+            self.fill_fanction(event)
 
     def mouseMoveEvent(self, event):
         if (event.buttons() & Qt.LeftButton) & self.drawing:
@@ -113,15 +122,62 @@ class Window(QMainWindow):
         if event.button == Qt.LeftButton:
             self.drawing = False
 
+    def set_fill(self):
+        self.fill = True
+
+    def fill_fanction(self, event):
+        image = self.image
+        w, h = image.width(), image.height()
+        x, y = event.x(), event.y()
+        # Get our target color from origin.
+        target_color = image.pixel(x, y)
+
+        have_seen = set()
+        queue = [(x, y)]
+        def get_cardinal_points(have_seen, center_pos):
+            points = []
+            cx, cy = center_pos
+            for x, y in [(1, 0), (0, 1), (-1, 0), (0, -1)]:
+                xx, yy = cx + x, cy + y
+                if (xx >= 0 and xx < w and
+                        yy >= 0 and yy < h and
+                        (xx, yy) not in have_seen):
+                            points.append((xx, yy))
+                            have_seen.add((xx, yy))
+            return points
+            # Now perform the search and fill.
+        p = QPainter(self.image)
+        p.setPen(QPen(self.brushColor))
+
+        while queue:
+            x, y = queue.pop()
+            if image.pixel(x, y) == target_color:
+                p.drawPoint(QPoint(x, y))
+                queue.extend(get_cardinal_points(have_seen, (x, y)))
+
+        self.update()
+
+
+
     def paintEvent(self, event):
         canvasPainter = QPainter(self)
         canvasPainter.drawImage(self.rect(), self.image, self.image.rect())
 
+
+    def open(self):
+        filePath= QFileDialog.getOpenFileNames(self, "Open Image", "", "ALL Files(*.*)")
+        print(filePath)
+        if filePath == "":
+            return
+        self.image.load(filePath[0][0])
+
+
     def save(self):
-        filePath, = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(.png);;JPEG(.jpeg);;JPG(.jpg);; ALL Files(*.*)")
+        filePath,_= QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(.png);;JPEG(.jpeg);;JPG(.jpg);; ALL Files(*.*)")
         if filePath == "":
             return
         self.image.save(filePath)
+
 
     def clear(self):
         self.image.fill(Qt.white)
@@ -129,15 +185,20 @@ class Window(QMainWindow):
 
     def px_3(self):
         self.brushSize = 3
+        self.fill = False
+
 
     def px_5(self):
         self.brushSize = 5
+        self.fill = False
 
     def px_7(self):
         self.brushSize = 7
+        self.fill = False
 
     def px_9(self):
         self.brushSize = 9
+        self.fill = False
 
     def blackColor(self):
         self.brushColor = Qt.black
